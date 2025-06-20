@@ -1,21 +1,8 @@
-console.log('🚨🚨🚨 SERVER.JS IS STARTING! 🚨🚨🚨');
-console.log('🚨🚨🚨 CURRENT WORKING DIRECTORY:', process.cwd());
-console.log('🚨🚨🚨 __dirname:', __dirname);
-
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { parallelCrawl } = require('./parallelCrawler');
-console.log('🚨🚨🚨 ABOUT TO REQUIRE CRAWLPAGES.JS! 🚨🚨🚨');
-
-// Force clear module cache for crawlPages.js before requiring
-const path = require('path');
-const crawlPagesPath = path.resolve(__dirname, './crawlPages.js');
-delete require.cache[crawlPagesPath];
-console.log('🚨🚨🚨 CLEARED MODULE CACHE FOR CRAWLPAGES.JS! 🚨🚨🚨');
-
 const { crawlSinglePage } = require('./crawlPages');
-console.log('🚨🚨🚨 CRAWLPAGES.JS REQUIRED SUCCESSFULLY! 🚨🚨🚨');
 const { exportPOMFiles } = require('./pomExporter');
 const { predictBestLocatorStrategy, generateOptimizedLocators } = require('./aiModel');
 // const PORT = 5000;
@@ -344,12 +331,10 @@ app.post('/api/generate-locators', async (req, res) => {
 
         // Transform data for frontend with better quality and deduplication
         const flattenedLocators = [];
-        const globalSeenLocators = new Set(); // Global deduplication across all pages        console.log(`🔧 Processing ${results.length} pages for quality locators...`);
+        const globalSeenLocators = new Set(); // Global deduplication across all pages
           // Optimized processing limits based on mode
         const MAX_PAGES_TO_PROCESS = singlePageMode ? results.length : Math.min(results.length, 25); // Increased from 10 to 25
         const MAX_LOCATORS_PER_PAGE = singlePageMode ? 1000 : 150; // Increased from 50 to 150
-        
-        console.log(`⚡ Processing up to ${MAX_PAGES_TO_PROCESS} pages with max ${MAX_LOCATORS_PER_PAGE} locators per page`);
         
         let processedPages = 0;
         let processedLocators = 0;
@@ -373,16 +358,12 @@ app.post('/api/generate-locators', async (req, res) => {
                 
                 // Limit locators per page to avoid processing too many
                 const locatorsToProcess = page.locators.slice(0, MAX_LOCATORS_PER_PAGE);
-                if (page.locators.length > MAX_LOCATORS_PER_PAGE) {
-                    console.log(`  ⚠️  Limiting to first ${MAX_LOCATORS_PER_PAGE} locators (had ${page.locators.length})`);
-                }                // Process in batches to avoid blocking
+                // Process in batches to avoid blocking
                 for (let index = 0; index < locatorsToProcess.length; index++) {
                     processedLocators++;
                     
                     // Optimized heartbeat frequency - less console spam
                     if (processedLocators % 20 === 0) {
-                        console.log(`    ⚡ Progress: ${processedLocators} locators processed, ${debugStats.added} added`);
-                        
                         // Allow event loop to process other operations
                         await new Promise(resolve => setTimeout(resolve, 0));
                     }
@@ -428,15 +409,10 @@ app.post('/api/generate-locators', async (req, res) => {
                     }
                       if (!matchesFilter) {
                         debugStats.filteredOut++;
-                        if (processedLocators % 10 === 0) {
-                            console.log(`      ⏭️  DEBUG: Locator ${processedLocators} filtered out (no filter match)`);
-                        }
                         continue; // Skip elements that don't match selected filters
                     }
                     
-                    if (processedLocators % 10 === 0) {
-                        console.log(`      ✅ DEBUG: Locator ${processedLocators} passed filter check`);
-                    }// More lenient filtering for meaningful locators
+                    // More lenient filtering for meaningful locators
                     const isQualityLocator = 
                         locator.isInteractive || // Interactive elements
                         locator.testId || // Test automation attributes
@@ -456,14 +432,8 @@ app.post('/api/generate-locators', async (req, res) => {
                         (locator.tagName && ['input', 'button', 'select', 'textarea', 'a'].includes(locator.tagName.toLowerCase()));
                       if (!isQualityLocator) {
                         debugStats.qualityFiltered++;
-                        if (processedLocators % 10 === 0) {
-                            console.log(`      ⏭️  DEBUG: Locator ${processedLocators} failed quality check`);
-                        }
                         continue; // Skip low-quality locators
                     }
-                    
-                    if (processedLocators % 10 === 0) {
-                        console.log(`      ✅ DEBUG: Locator ${processedLocators} passed quality check`);                    }
                     
                     // SIMPLIFIED: Skip all AI predictions for multi-page to avoid hangs
                     let aiRecommendation = { strategy: 'FALLBACK', confidence: 0.5 };
@@ -617,18 +587,15 @@ app.post('/api/generate-locators', async (req, res) => {
             } else {
                 // Silently note pages without locators
             }
-        }console.log(`✅ Processing completed: ${processedPages} pages, ${processedLocators} total locators processed`);
-        console.log(`🎯 Found ${addedLocators} quality unique locators (${flattenedLocators.length} in array)`);
-
-        // Add heartbeat to show we're still alive during sorting
-        console.log(`🔄 Sorting locators by relevance...`);        // Sort by page depth and interactivity
+        }
+        
+        // Sort by page depth and interactivity
         flattenedLocators.sort((a, b) => {
             if (a.depth !== b.depth) return a.depth - b.depth;
             if (a.isInteractive !== b.isInteractive) return b.isInteractive - a.isInteractive;
             return 0;
         });
 
-        console.log(`🔄 Grouping locators by page...`);
         // Group locators by page for better frontend display
         const groupedByPage = flattenedLocators.reduce((acc, locator) => {
             const pageKey = locator.pageUrl;
@@ -659,8 +626,6 @@ app.post('/api/generate-locators', async (req, res) => {
                 pagesWithLocators: pageGroups.length            },
             results, // Keep original format for debugging
         });
-        
-        console.log(`✅ JSON response sent successfully!`);
         
     } catch (error) {
         console.error('❌ Error generating locators:', error.message);

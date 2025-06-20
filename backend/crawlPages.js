@@ -1,16 +1,11 @@
-console.log('🚨🚨🚨 CRAWLPAGES.JS FILE IS BEING LOADED! 🚨🚨🚨');
-
 const extractLocators = async (page, locatorFilters = {}) => {
-    console.log('🚨🚨🚨 EXTRACT LOCATORS FUNCTION CALLED! 🚨🚨🚨');
     try {
         // Add page readiness check
         await page.waitForFunction(() => document.readyState === 'complete', { timeout: 10000 }).catch(() => {
             console.warn('Page readyState timeout, continuing anyway');
         });
         
-        console.log('🚨🚨🚨 ABOUT TO CALL page.evaluate! 🚨🚨🚨');
         return await page.evaluate((filters) => {
-            console.log('🚨🚨🚨 INSIDE page.evaluate! 🚨🚨🚨');
             const locators = [];
             
             function safeGetProperty(obj, prop, fallback = null) {
@@ -355,7 +350,6 @@ const extractLocators = async (page, locatorFilters = {}) => {
                     
                     // Generate smart relative XPath
                     function getSmartXPath(element) {
-                        console.log('🚨 NEW OPTIMIZED getSmartXPath FUNCTION IS BEING CALLED!');
                         if (!element || element === document.documentElement) return '/html';
                         
                         // Priority 1: Use test attributes
@@ -381,27 +375,21 @@ const extractLocators = async (page, locatorFilters = {}) => {
                         const text = element.textContent ? element.textContent.trim() : '';
                         if (text && text.length > 0 && text.length < 50) {
                             const tagName = element.tagName.toLowerCase();
-                            console.log(`🔍 Processing element: ${tagName} with text: "${text}"`);
                             if (['button', 'a', 'span', 'div', 'p'].includes(tagName)) {
                                 // Special handling for close buttons - prefer span over button for single character text
                                 if ((text === '×' || text === 'X' || text === '✕' || text === '✖') && tagName === 'button') {
                                     // Check if there's a direct child span with the same text
                                     const childSpan = element.querySelector('span');
                                     if (childSpan && childSpan.textContent && childSpan.textContent.trim() === text) {
-                                        console.log(`🔧 Fixed close button: Using span instead of button for text "${text}"`);
                                         return `//span[normalize-space(text())='${text}']`;
                                     }
                                 }
                                 
                                 // Enhanced handling for links (a tags) - prioritize title attribute, then child elements
                                 if (tagName === 'a') {
-                                    console.log(`🔍 Processing link element with text: "${text}"`);
-                                    console.log(`   Link HTML: ${element.outerHTML.substring(0, 150)}${element.outerHTML.length > 150 ? '...' : ''}`);
-                                    
                                     // Priority 1: Check if element has title attribute
                                     const titleAttr = element.getAttribute('title');
                                     if (titleAttr && titleAttr.trim().length > 0 && titleAttr.trim().length < 50) {
-                                        console.log(`🔧 Optimized link locator: Using title attribute "${titleAttr}" for 'a' tag`);
                                         return `//a[@title='${titleAttr.trim()}']`;
                                     }
                                     
@@ -410,13 +398,11 @@ const extractLocators = async (page, locatorFilters = {}) => {
                                     if (spans.length > 0) {
                                         const firstSpan = spans[0];
                                         const spanText = firstSpan.textContent ? firstSpan.textContent.trim() : '';
-                                        console.log(`🔧 FOUND SPAN! Using span with text "${spanText}" instead of 'a'`);
                                         return `//span[normalize-space(text())='${spanText}']`;
                                     }
                                     
                                     // Priority 3: Check all child elements for text content
                                     const childElements = element.querySelectorAll('*');
-                                    console.log(`   Found ${childElements.length} child elements to check`);
                                     for (const child of childElements) {
                                         const childText = child.textContent ? child.textContent.trim() : '';
                                         const childTagName = child.tagName ? child.tagName.toLowerCase() : '';
@@ -428,9 +414,7 @@ const extractLocators = async (page, locatorFilters = {}) => {
                                             // Make sure this child's text is not just a subset of a parent's text
                                             // and that it's actually the primary text content
                                             const childTextRatio = childText.length / (text.length || 1);
-                                            console.log(`   Checking child ${childTagName}: "${childText}" (ratio: ${childTextRatio.toFixed(2)})`);
                                             if (childTextRatio > 0.5) { // Lowered threshold to 50% to catch more cases
-                                                console.log(`🔧 Optimized link locator: Using ${childTagName} child with text "${childText}" instead of 'a'`);
                                                 return `//${childTagName}[normalize-space(text())='${childText}']`;
                                             }
                                         }
@@ -441,7 +425,6 @@ const extractLocators = async (page, locatorFilters = {}) => {
                                     if (childSpan) {
                                         const spanText = childSpan.textContent ? childSpan.textContent.trim() : '';
                                         if (spanText && spanText.length > 0) {
-                                            console.log(`🔧 Optimized link locator: Using direct child span with text "${spanText}"`);
                                             return `//span[normalize-space(text())='${spanText}']`;
                                         }
                                     }
@@ -449,13 +432,10 @@ const extractLocators = async (page, locatorFilters = {}) => {
                                     // Priority 4: Check for ANY child with text content (more aggressive)
                                     const allChildren = Array.from(element.children);
                                     if (allChildren.length > 0) {
-                                        console.log(`   Found ${allChildren.length} direct children to check`);
                                         for (const child of allChildren) {
                                             const childText = child.textContent ? child.textContent.trim() : '';
                                             const childTagName = child.tagName ? child.tagName.toLowerCase() : '';
                                             if (childText && childText.length > 0 && childText.length < 100) { // Increased length limit
-                                                console.log(`   Found suitable child: ${childTagName} with text "${childText}"`);
-                                                console.log(`🔧 Optimized link locator: Using ${childTagName} child with text "${childText}"`);
                                                 return `//${childTagName}[normalize-space(text())='${childText}']`;
                                             }
                                         }
@@ -464,22 +444,14 @@ const extractLocators = async (page, locatorFilters = {}) => {
                                     // Priority 5: If no suitable child found, try to use the link's href or other attributes
                                     const href = element.getAttribute('href');
                                     if (href && href !== '#' && href.length > 0) {
-                                        console.log(`🔧 Link locator: Using href attribute "${href}" as fallback`);
                                         return `//a[@href='${href}']`;
                                     }
                                     
-                                    // Final fallback: use the 'a' tag with text, but log this as suboptimal
-                                    console.log(`⚠️ ALERT: Still using suboptimal 'a' tag locator for text "${text}"`);
-                                    console.log(`   This means no child elements were found with suitable text content`);
-                                    console.log(`   Original element HTML: ${element.outerHTML}`);
+                                    // Final fallback: use the 'a' tag with text
                                     return `//a[normalize-space(text())='${text}']`;
                                 }
                                 
                                 // For non-link elements, continue with the original logic
-                                // Debug logging for close button elements
-                                if (text === '×' || text === 'X' || text.includes('close')) {
-                                    console.log(`🐛 Close button debug: tagName=${tagName}, text="${text}", element.outerHTML=${element.outerHTML.substring(0, 200)}`);
-                                }
                                 return `//${tagName}[normalize-space(text())='${text}']`;
                             }
                         }
@@ -529,9 +501,7 @@ const extractLocators = async (page, locatorFilters = {}) => {
                         return '//' + parts.join('/');
                     }
                     
-                    console.log(`🔥 ABOUT TO CALL getSmartXPath for element: ${el.tagName}`);
                     const xpath = getSmartXPath(el);
-                    console.log(`🔥 getSmartXPath RETURNED: ${xpath}`);
                     const cssSelector = getCSSSelector(el);
                     
                     // Only add if we have useful attributes or it's interactive, and it's not a useless element
@@ -1094,7 +1064,6 @@ const crawlPages = async (page, url, visited, results, depth = 0, maxDepth = 3, 
 
 // New function for single page crawling
 const crawlSinglePage = async (url, username = '', password = '', locatorFilters = {}) => {
-    console.log('🚨🚨🚨 CRAWL SINGLE PAGE FUNCTION CALLED! 🚨🚨🚨');
     const puppeteer = require('puppeteer');
     let browser = null;
     let page = null;
@@ -1145,7 +1114,6 @@ const crawlSinglePage = async (url, username = '', password = '', locatorFilters
         await new Promise(resolve => setTimeout(resolve, 2000)); // 2 seconds max wait
         console.log(`📄 Extracting locators from: ${url}`);
           
-        console.log('🚨🚨🚨 ABOUT TO CALL extractLocators! 🚨🚨🚨');
         // Extract locators with timeout protection
         const locators = await Promise.race([
             extractLocators(page, locatorFilters),
@@ -1153,7 +1121,6 @@ const crawlSinglePage = async (url, username = '', password = '', locatorFilters
                 setTimeout(() => reject(new Error('Locator extraction timeout')), 30000)
             )
         ]);
-        console.log('🚨🚨🚨 extractLocators COMPLETED! 🚨🚨🚨');
         
         console.log(`✅ Found ${locators.length} elements on the page`);
 
