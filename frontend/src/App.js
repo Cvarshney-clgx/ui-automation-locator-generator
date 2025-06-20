@@ -99,7 +99,7 @@ const App = () => {
             <Header />
             <Box sx={{ p: 4 }}>
                 <Typography variant="h4" sx={{ mb: 3 }}>
-                    UI Automation Locator Generator
+                    Locator Genie
                 </Typography>
                 
                 {/* URL Input Section */}
