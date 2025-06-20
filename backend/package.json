@@ -1,0 +1,21 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "main": "aiModel.js",
+  "scripts": {
+    "test": "node test-ai-model.js",
+    "start": "node server.js",
+    "test-ai": "node test-ai-model.js"
+  },
+  "keywords": ["ui-automation", "locator-generator", "smart-locators", "test-automation"],
+  "author": "",
+  "license": "ISC",
+  "description": "Smart UI Locator Generator with Intelligent Strategy Selection",
+  "dependencies": {
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "node-fetch": "^2.7.0",
+    "puppeteer": "^24.10.1"
+  }
+}
