@@ -18,7 +18,10 @@ import {
     InputAdornment,
     Divider,
     Switch,
-    FormControlLabel
+    FormControlLabel,
+    Menu,
+    MenuItem,
+    ButtonGroup
 } from '@mui/material';
 import { 
     ContentCopy as CopyIcon, 
@@ -27,7 +30,9 @@ import {
     FilterList as FilterIcon,
     ViewList as ViewListIcon,
     ViewModule as ViewModuleIcon,
-    Clear as ClearIcon
+    Clear as ClearIcon,
+    GetApp as DownloadIcon,
+    Code as CodeIcon
 } from '@mui/icons-material';
 
 const LocatorList = ({ locators, pageGroups, summary }) => {
@@ -37,6 +42,7 @@ const LocatorList = ({ locators, pageGroups, summary }) => {
     const [filterType, setFilterType] = useState('all');
     const [showPageView, setShowPageView] = useState(true);
     const [lastDataUpdate, setLastDataUpdate] = useState(null);
+    const [bulkCopyMenuAnchor, setBulkCopyMenuAnchor] = useState(null);
 
     // Handle both old format (flat array) and new format (page groups)
     const displayData = pageGroups && pageGroups.length > 0 ? pageGroups : null;
@@ -321,6 +327,268 @@ const LocatorList = ({ locators, pageGroups, summary }) => {
             default:
                 return `cy.get('${locator.value}')`;
         }
+    };
+
+    // POM Generation Functions
+    const generatePOMClassName = () => {
+        const url = processedPageGroups[0]?.pageUrl || 'WebPage';
+        const domain = url.replace(/https?:\/\//, '').replace(/[^a-zA-Z0-9]/g, '');
+        return domain.charAt(0).toUpperCase() + domain.slice(1) + 'Page';
+    };
+
+    const generateSeleniumPOMJava = () => {
+        const className = generatePOMClassName();
+        let pom = `package pages;\n\n`;
+        pom += `import org.openqa.selenium.WebDriver;\n`;
+        pom += `import org.openqa.selenium.WebElement;\n`;
+        pom += `import org.openqa.selenium.support.FindBy;\n`;
+        pom += `import org.openqa.selenium.support.PageFactory;\n\n`;
+        pom += `public class ${className} {\n`;
+        pom += `    private WebDriver driver;\n\n`;
+        pom += `    public ${className}(WebDriver driver) {\n`;
+        pom += `        this.driver = driver;\n`;
+        pom += `        PageFactory.initElements(driver, this);\n`;
+        pom += `    }\n\n`;
+        
+        allLocators.forEach(locator => {
+            const elementName = locator.description.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const findByAnnotation = generateJavaFindBy(locator);
+            pom += `    ${findByAnnotation}\n`;
+            pom += `    private WebElement ${elementName};\n\n`;
+        });
+
+        pom += `    // Action methods\n`;
+        allLocators.forEach(locator => {
+            const elementName = locator.description.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const methodName = elementName.charAt(0).toUpperCase() + elementName.slice(1);
+            if (locator.element?.tag === 'input' || locator.element?.tag === 'textarea') {
+                pom += `    public void enter${methodName}(String text) {\n`;
+                pom += `        ${elementName}.clear();\n`;
+                pom += `        ${elementName}.sendKeys(text);\n`;
+                pom += `    }\n\n`;
+            } else {
+                pom += `    public void click${methodName}() {\n`;
+                pom += `        ${elementName}.click();\n`;
+                pom += `    }\n\n`;
+            }
+        });
+
+        pom += `}`;
+        return pom;
+    };
+
+    const generateJavaFindBy = (locator) => {
+        switch (locator.type) {
+            case 'id':
+                return `@FindBy(id = "${locator.value}")`;
+            case 'name':
+                return `@FindBy(name = "${locator.value}")`;
+            case 'className':
+                return `@FindBy(className = "${locator.value}")`;
+            case 'css':
+                return `@FindBy(css = "${locator.value}")`;
+            case 'xpath':
+                return `@FindBy(xpath = "${locator.value}")`;
+            case 'testId':
+                return `@FindBy(css = "[data-testid='${locator.value}']")`;
+            default:
+                return `@FindBy(css = "${locator.value}")`;
+        }
+    };
+
+    const generateSeleniumPOMPython = () => {
+        const className = generatePOMClassName();
+        let pom = `from selenium.webdriver.common.by import By\n`;
+        pom += `from selenium.webdriver.support.ui import WebDriverWait\n`;
+        pom += `from selenium.webdriver.support import expected_conditions as EC\n\n`;
+        pom += `class ${className}:\n`;
+        pom += `    def __init__(self, driver):\n`;
+        pom += `        self.driver = driver\n`;
+        pom += `        self.wait = WebDriverWait(driver, 10)\n\n`;
+        
+        pom += `    # Locators\n`;
+        allLocators.forEach(locator => {
+            const elementName = locator.description.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+            const pythonLocator = generatePythonLocator(locator);
+            pom += `    ${elementName.toUpperCase()}_LOCATOR = ${pythonLocator}\n`;
+        });
+
+        pom += `\n    # Action methods\n`;
+        allLocators.forEach(locator => {
+            const elementName = locator.description.replace(/[^a-zA-Z0-9]/g, '_').toLowerCase();
+            const methodName = elementName.toLowerCase();
+            if (locator.element?.tag === 'input' || locator.element?.tag === 'textarea') {
+                pom += `    def enter_${methodName}(self, text):\n`;
+                pom += `        element = self.wait.until(EC.element_to_be_clickable(self.${elementName.toUpperCase()}_LOCATOR))\n`;
+                pom += `        element.clear()\n`;
+                pom += `        element.send_keys(text)\n\n`;
+            } else {
+                pom += `    def click_${methodName}(self):\n`;
+                pom += `        element = self.wait.until(EC.element_to_be_clickable(self.${elementName.toUpperCase()}_LOCATOR))\n`;
+                pom += `        element.click()\n\n`;
+            }
+        });
+
+        return pom;
+    };
+
+    const generatePythonLocator = (locator) => {
+        switch (locator.type) {
+            case 'id':
+                return `(By.ID, "${locator.value}")`;
+            case 'name':
+                return `(By.NAME, "${locator.value}")`;
+            case 'className':
+                return `(By.CLASS_NAME, "${locator.value}")`;
+            case 'css':
+                return `(By.CSS_SELECTOR, "${locator.value}")`;
+            case 'xpath':
+                return `(By.XPATH, "${locator.value}")`;
+            case 'testId':
+                return `(By.CSS_SELECTOR, "[data-testid='${locator.value}']")`;
+            default:
+                return `(By.CSS_SELECTOR, "${locator.value}")`;
+        }
+    };
+
+    const generatePlaywrightPOM = () => {
+        const className = generatePOMClassName();
+        let pom = `import { Page, Locator } from '@playwright/test';\n\n`;
+        pom += `export class ${className} {\n`;
+        pom += `    readonly page: Page;\n\n`;
+        
+        allLocators.forEach(locator => {
+            const elementName = locator.description.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            pom += `    readonly ${elementName}: Locator;\n`;
+        });
+
+        pom += `\n    constructor(page: Page) {\n`;
+        pom += `        this.page = page;\n`;
+        
+        allLocators.forEach(locator => {
+            const elementName = locator.description.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const playwrightLocator = generatePlaywrightLocator(locator);
+            pom += `        this.${elementName} = page.locator('${playwrightLocator}');\n`;
+        });
+
+        pom += `    }\n\n`;
+        
+        pom += `    // Action methods\n`;
+        allLocators.forEach(locator => {
+            const elementName = locator.description.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const methodName = elementName.charAt(0).toUpperCase() + elementName.slice(1);
+            if (locator.element?.tag === 'input' || locator.element?.tag === 'textarea') {
+                pom += `    async fill${methodName}(text: string) {\n`;
+                pom += `        await this.${elementName}.fill(text);\n`;
+                pom += `    }\n\n`;
+            } else {
+                pom += `    async click${methodName}() {\n`;
+                pom += `        await this.${elementName}.click();\n`;
+                pom += `    }\n\n`;
+            }
+        });
+
+        pom += `}`;
+        return pom;
+    };
+
+    const generatePlaywrightLocator = (locator) => {
+        switch (locator.type) {
+            case 'id':
+                return `#${locator.value}`;
+            case 'name':
+                return `[name="${locator.value}"]`;
+            case 'className':
+                return `.${locator.value}`;
+            case 'css':
+                return locator.value;
+            case 'xpath':
+                return locator.value;
+            case 'testId':
+                return `[data-testid="${locator.value}"]`;
+            default:
+                return locator.value;
+        }
+    };
+
+    const generateCypressPOM = () => {
+        const className = generatePOMClassName();
+        let pom = `class ${className} {\n`;
+        
+        pom += `    // Locators\n`;
+        allLocators.forEach(locator => {
+            const elementName = locator.description.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const cypressLocator = generateCypressLocator(locator);
+            pom += `    get ${elementName}() { return cy.get('${cypressLocator}'); }\n`;
+        });
+
+        pom += `\n    // Action methods\n`;
+        allLocators.forEach(locator => {
+            const elementName = locator.description.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+            const methodName = elementName.charAt(0).toUpperCase() + elementName.slice(1);
+            if (locator.element?.tag === 'input' || locator.element?.tag === 'textarea') {
+                pom += `    enter${methodName}(text) {\n`;
+                pom += `        this.${elementName}.clear().type(text);\n`;
+                pom += `        return this;\n`;
+                pom += `    }\n\n`;
+            } else {
+                pom += `    click${methodName}() {\n`;
+                pom += `        this.${elementName}.click();\n`;
+                pom += `        return this;\n`;
+                pom += `    }\n\n`;
+            }
+        });
+
+        pom += `}\n\nexport default ${className};`;
+        return pom;
+    };
+
+    const generateCypressLocator = (locator) => {
+        switch (locator.type) {
+            case 'id':
+                return `#${locator.value}`;
+            case 'name':
+                return `[name="${locator.value}"]`;
+            case 'className':
+                return `.${locator.value}`;
+            case 'css':
+                return locator.value;
+            case 'xpath':
+                return locator.value;
+            case 'testId':
+                return `[data-testid="${locator.value}"]`;
+            default:
+                return locator.value;
+        }
+    };
+
+    const handleBulkCopy = (framework) => {
+        let pomCode = '';
+        let frameworkName = '';
+        
+        switch (framework) {
+            case 'selenium-java':
+                pomCode = generateSeleniumPOMJava();
+                frameworkName = 'Selenium Java POM';
+                break;
+            case 'selenium-python':
+                pomCode = generateSeleniumPOMPython();
+                frameworkName = 'Selenium Python POM';
+                break;
+            case 'playwright':
+                pomCode = generatePlaywrightPOM();
+                frameworkName = 'Playwright POM';
+                break;
+            case 'cypress':
+                pomCode = generateCypressPOM();
+                frameworkName = 'Cypress POM';
+                break;
+            default:
+                return;
+        }
+        
+        copyToClipboard(pomCode, frameworkName);
+        setBulkCopyMenuAnchor(null);
     };
 
     const renderLocatorCard = (locator, index) => (
@@ -635,7 +903,7 @@ const LocatorList = ({ locators, pageGroups, summary }) => {
             <Card sx={{ mb: 3 }}>
                 <CardContent>
                     <Grid container spacing={2} alignItems="center">
-                        <Grid item xs={12} md={6}>
+                        <Grid item xs={12} md={4}>
                             <TextField
                                 fullWidth
                                 label="Search locators"
@@ -663,7 +931,8 @@ const LocatorList = ({ locators, pageGroups, summary }) => {
                                 placeholder="Search by description, value, element type, page name..."
                                 helperText={`Showing ${totalFilteredLocators} of ${totalLocators} locators`}
                             />
-                        </Grid>                        <Grid item xs={12} md={3}>
+                        </Grid>
+                        <Grid item xs={12} md={2}>
                             <TextField
                                 select
                                 fullWidth
@@ -679,6 +948,51 @@ const LocatorList = ({ locators, pageGroups, summary }) => {
                                     </option>
                                 ))}
                             </TextField>
+                        </Grid>
+                        <Grid item xs={12} md={3}>
+                            <Button
+                                variant="contained"
+                                color="primary"
+                                startIcon={<CodeIcon />}
+                                fullWidth
+                                onClick={(e) => setBulkCopyMenuAnchor(e.currentTarget)}
+                                disabled={allLocators.length === 0}
+                            >
+                                Copy All as POM
+                            </Button>
+                            <Menu
+                                anchorEl={bulkCopyMenuAnchor}
+                                open={Boolean(bulkCopyMenuAnchor)}
+                                onClose={() => setBulkCopyMenuAnchor(null)}
+                                PaperProps={{
+                                    sx: { minWidth: 200 }
+                                }}
+                            >
+                                <MenuItem onClick={() => handleBulkCopy('selenium-java')}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <Typography variant="body2" fontWeight="bold">Selenium Java</Typography>
+                                        <Typography variant="caption" color="text.secondary">Page Object Model</Typography>
+                                    </Box>
+                                </MenuItem>
+                                <MenuItem onClick={() => handleBulkCopy('selenium-python')}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <Typography variant="body2" fontWeight="bold">Selenium Python</Typography>
+                                        <Typography variant="caption" color="text.secondary">Page Object Model</Typography>
+                                    </Box>
+                                </MenuItem>
+                                <MenuItem onClick={() => handleBulkCopy('playwright')}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <Typography variant="body2" fontWeight="bold">Playwright</Typography>
+                                        <Typography variant="caption" color="text.secondary">TypeScript POM</Typography>
+                                    </Box>
+                                </MenuItem>
+                                <MenuItem onClick={() => handleBulkCopy('cypress')}>
+                                    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+                                        <Typography variant="body2" fontWeight="bold">Cypress</Typography>
+                                        <Typography variant="caption" color="text.secondary">JavaScript POM</Typography>
+                                    </Box>
+                                </MenuItem>
+                            </Menu>
                         </Grid>
                         <Grid item xs={12} md={3}>
                             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
