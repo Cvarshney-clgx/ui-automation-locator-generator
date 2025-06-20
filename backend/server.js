@@ -1,9 +1,25 @@
+console.log('🚨🚨🚨 SERVER.JS IS STARTING! 🚨🚨🚨');
+console.log('🚨🚨🚨 CURRENT WORKING DIRECTORY:', process.cwd());
+console.log('🚨🚨🚨 __dirname:', __dirname);
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
 const { parallelCrawl } = require('./parallelCrawler');
+console.log('🚨🚨🚨 ABOUT TO REQUIRE CRAWLPAGES.JS! 🚨🚨🚨');
+
+// Force clear module cache for crawlPages.js before requiring
+const path = require('path');
+const crawlPagesPath = path.resolve(__dirname, './crawlPages.js');
+delete require.cache[crawlPagesPath];
+console.log('🚨🚨🚨 CLEARED MODULE CACHE FOR CRAWLPAGES.JS! 🚨🚨🚨');
+
+const { crawlSinglePage } = require('./crawlPages');
+console.log('🚨🚨🚨 CRAWLPAGES.JS REQUIRED SUCCESSFULLY! 🚨🚨🚨');
 const { exportPOMFiles } = require('./pomExporter');
 const { predictBestLocatorStrategy, generateOptimizedLocators } = require('./aiModel');
+// const PORT = 5000;
+// const HOST = "0.0.0.0"; // Allow all network traffic
 
 const app = express();
 
@@ -65,6 +81,87 @@ app.get('/api/test', (req, res) => {
 // Simple connectivity test endpoint  
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Test XPath generation endpoint
+app.post('/api/test-xpath', (req, res) => {
+    console.log('🧪 XPath test endpoint called');
+    
+    try {
+        const { getSmartXPath } = require('./crawlPages');
+        
+        // Test cases for our XPath optimization
+        const testCases = [
+            {
+                name: 'Link with title matching text',
+                element: {
+                    tagName: 'a',
+                    title: 'Home Page',
+                    textContent: 'Home Page',
+                    href: '/home'
+                },
+                expected: "//a[@title='Home Page']"
+            },
+            {
+                name: 'Link with span child containing text',
+                element: {
+                    tagName: 'a',
+                    textContent: 'Click Here',
+                    href: '/click',
+                    children: [
+                        {
+                            tagName: 'span',
+                            textContent: 'Click Here'
+                        }
+                    ]
+                },
+                expected: "//span[normalize-space(text())='Click Here']"
+            },
+            {
+                name: 'Simple link fallback',
+                element: {
+                    tagName: 'a',
+                    textContent: 'Simple Link',
+                    href: '/simple'
+                },
+                expected: "//a[normalize-space(text())='Simple Link']"
+            }
+        ];
+        
+        const results = testCases.map(testCase => {
+            console.log(`🔍 Testing: ${testCase.name}`);
+            const xpath = getSmartXPath(testCase.element, testCase.element.textContent);
+            console.log(`📋 Generated XPath: ${xpath}`);
+            console.log(`📋 Expected XPath: ${testCase.expected}`);
+            
+            return {
+                name: testCase.name,
+                element: testCase.element,
+                generated: xpath,
+                expected: testCase.expected,
+                matches: xpath === testCase.expected
+            };
+        });
+        
+        console.log('🧪 XPath test results:', results);
+        
+        res.json({
+            success: true,
+            testResults: results,
+            summary: {
+                total: results.length,
+                passed: results.filter(r => r.matches).length,
+                failed: results.filter(r => !r.matches).length
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ XPath test error:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
 });
 
 // Test endpoint to return sample locator data
@@ -206,7 +303,6 @@ app.post('/api/generate-locators', async (req, res) => {
                 try {
                     let crawlResults;
                     if (singlePageMode) {
-                        const { crawlSinglePage } = require('./crawlPages');
                         crawlResults = await crawlSinglePage(url, username, password, locatorFilters);
                     } else {
                         crawlResults = await parallelCrawl(url, username, password, 1, 3, locatorFilters);
@@ -760,3 +856,6 @@ app.post('/api/test-url', async (req, res) => {
 // Start the server
 const PORT = 5000;
 app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
+// app.listen(PORT, HOST, () => {
+//     console.log(`Server running on http://0.0.0.0:${PORT}`);
+// });
